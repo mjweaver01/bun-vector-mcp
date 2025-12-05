@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "feed": "bun src/scripts/feed.ts",
+    "feed": "bun src/scripts/feed-files.ts",
+    "feed-sitemap": "bun src/scripts/feed-sitemap.ts",
     "mcp": "MCP_MODE=true bun src/mcp.ts",
     "test:mcp": "MCP_MODE=true mcp-inspector bun src/mcp.ts",
     "format": "prettier --write .",
@@ -31,6 +32,7 @@
     "marked": "^16.4.1",
     "marked-katex-extension": "^5.1.5",
     "pdf-parse": "^2.4.5",
+    "playwright": "^1.57.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "sqlite-vec": "^0.1.7-alpha.2",

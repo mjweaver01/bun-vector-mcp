@@ -610,10 +610,16 @@ bun --watch src/index.ts
 bun src/index.ts
 ```
 
-**Ingest Documents:**
+**Ingest Files:**
 
 ```bash
-bun src/scripts/feed.ts [source-directory]
+bun src/scripts/feed-files.ts [source-directory]
+```
+
+**Ingest Sitemap:**
+
+```bash
+bun src/scripts/feed-sitemap.ts <sitemap-url>
 ```
 
 **MCP Server:**

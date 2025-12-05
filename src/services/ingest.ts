@@ -14,6 +14,9 @@ import {
   normalizeForEmbedding,
   stripHtml,
 } from '../utils/text';
+import { extractAllUrls } from '../utils/sitemap';
+import { extractMainContent, isValidUrl, normalizeUrl } from '../utils/web';
+import { chromium, type Browser, type Page } from 'playwright';
 
 /**
  * Ingest a CSV file, processing each row as a separate document
@@ -404,5 +407,321 @@ export async function ingestDirectory(
   } catch (error) {
     console.error('Error reading directory:', error);
     return results;
+  }
+}
+
+/**
+ * Ingest content from a sitemap URL by visiting each page and extracting content
+ * Uses Playwright browser automation to bypass bot detection
+ */
+export async function ingestSitemap(
+  db: Database,
+  sitemapUrl: string
+): Promise<IngestResult[]> {
+  const results: IngestResult[] = [];
+  let browser: Browser | null = null;
+  let page: Page | null = null;
+
+  try {
+    console.log(`\n=== Processing Sitemap: ${sitemapUrl} ===\n`);
+
+    // Extract all URLs from sitemap (handles nested sitemaps)
+    console.log('Extracting URLs from sitemap...');
+    const sitemapUrls = await extractAllUrls(sitemapUrl);
+
+    if (sitemapUrls.length === 0) {
+      console.error('No URLs found in sitemap');
+      return results;
+    }
+
+    console.log(`\nFound ${sitemapUrls.length} URLs to process\n`);
+
+    // Launch browser
+    console.log('Launching browser...');
+    browser = await chromium.launch({
+      headless: true,
+    });
+
+    // Create a single page context that we'll reuse
+    page = await browser.newPage({
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    });
+
+    // Initialize question generator once
+    console.log('Initializing question generator...');
+    await initializeQuestionGenerator();
+
+    // Get embedding model version
+    const modelVersion = getEmbeddingModelVersion();
+
+    // Process each URL
+    for (let i = 0; i < sitemapUrls.length; i++) {
+      const sitemapEntry = sitemapUrls[i]!;
+      const url = sitemapEntry.loc;
+
+      console.log(`\nProcessing URL ${i + 1}/${sitemapUrls.length}: ${url}`);
+
+      // Validate URL
+      if (!isValidUrl(url)) {
+        console.log(`  ✗ Skipping invalid URL: ${url}`);
+        results.push({
+          filename: url,
+          chunks_created: 0,
+          success: false,
+          error: 'Invalid URL',
+        });
+        continue;
+      }
+
+      const normalizedUrl = normalizeUrl(url);
+
+      try {
+        // Navigate to the page using Playwright
+        console.log('  Loading page...');
+
+        if (!page) {
+          throw new Error('Browser page not initialized');
+        }
+
+        // Navigate with timeout
+        await page.goto(url, {
+          waitUntil: 'networkidle',
+          timeout: 30000, // 30 second timeout
+        });
+
+        // Wait a bit for any dynamic content to load
+        await page.waitForTimeout(2000);
+
+        // Extract title
+        const pageTitle = await page.title();
+
+        // Remove non-content elements before extracting text
+        await page.evaluate(() => {
+          // Remove common non-content elements
+          const selectorsToRemove = [
+            'header',
+            'footer',
+            'nav',
+            'aside',
+            '[role="navigation"]',
+            '[role="banner"]',
+            '[role="complementary"]',
+            '[role="contentinfo"]',
+            // Headers and footers by class/id
+            '[class*="header"]',
+            '[id*="header"]',
+            '[class*="footer"]',
+            '[id*="footer"]',
+            // Cookie/consent banners
+            '[class*="cookie"]',
+            '[id*="cookie"]',
+            '[class*="consent"]',
+            '[id*="consent"]',
+            // Social media widgets
+            '[class*="social"]',
+            '[class*="share"]',
+            // Comments sections
+            '[class*="comment"]',
+            '[id*="comment"]',
+            '#disqus_thread',
+            // Sidebars
+            '[class*="sidebar"]',
+            '[id*="sidebar"]',
+            // Navigation and menus
+            '[class*="menu"]',
+            '[class*="navigation"]',
+            '[id*="menu"]',
+            // Ads and promotional content
+            '[class*="ad-"]',
+            '[class*="advertisement"]',
+            '[id*="ad-"]',
+            '[class*="promo"]',
+            // Related/recommended content
+            '[class*="related"]',
+            '[class*="recommended"]',
+            // Newsletter signups
+            '[class*="newsletter"]',
+            '[class*="subscribe"]',
+            // Popups and modals
+            '[class*="modal"]',
+            '[class*="popup"]',
+            '[class*="overlay"]',
+          ];
+
+          selectorsToRemove.forEach(selector => {
+            try {
+              const elements = document.querySelectorAll(selector);
+              elements.forEach(el => el.remove());
+            } catch (e) {
+              // Selector might not be valid, skip it
+            }
+          });
+        });
+
+        // Get all body text (with unwanted elements already removed)
+        const mainText = (await page.innerText('body'))
+          .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive newlines
+          .replace(/[ \t]+/g, ' ') // Multiple spaces to single space
+          .replace(/^\s+|\s+$/gm, '') // Trim each line
+          .trim();
+
+        // Get meta description if available
+        let description = '';
+        try {
+          const metaDesc = await page.$('meta[name="description"]');
+          if (metaDesc) {
+            description = (await metaDesc.getAttribute('content')) || '';
+          }
+        } catch (e) {
+          // No description meta tag
+        }
+
+        const extracted = {
+          text: mainText,
+          title: pageTitle || 'Untitled',
+          description,
+          url: normalizedUrl,
+        };
+
+        if (!extracted.text || extracted.text.trim().length === 0) {
+          console.log('  ✗ No content extracted from page');
+          results.push({
+            filename: normalizedUrl,
+            chunks_created: 0,
+            success: false,
+            error: 'No content extracted',
+          });
+          continue;
+        }
+
+        console.log(
+          `  Extracted ${extracted.text.length} characters from "${extracted.title}"`
+        );
+
+        // Chunk the content
+        const chunks =
+          extracted.text.length > CHUNK_SIZE
+            ? USE_SEMANTIC_CHUNKING
+              ? await semanticChunking(extracted.text)
+              : chunkText(extracted.text)
+            : [extracted.text];
+
+        console.log(`  Created ${chunks.length} chunks`);
+
+        // Process each chunk
+        for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+          const chunk = chunks[chunkIdx]!;
+
+          // Generate embeddings for this chunk
+          const normalizedChunk = normalizeForEmbedding(chunk);
+          const [chunkEmbedding] = await generateEmbeddings([normalizedChunk]);
+
+          // Generate questions for this chunk
+          console.log(
+            `  Generating questions for chunk ${chunkIdx + 1}/${chunks.length}...`
+          );
+          const questions = await generateQuestions(chunk);
+
+          // Generate question embeddings
+          let questionEmbeddings: number[][] = [];
+          if (questions.length > 0) {
+            const normalizedQuestions = questions.map(q =>
+              normalizeForEmbedding(q)
+            );
+            questionEmbeddings = await generateEmbeddings(normalizedQuestions);
+          }
+
+          // Create chunk-specific metadata
+          const chunkMetadata = {
+            source_type: 'sitemap',
+            source_url: normalizedUrl,
+            sitemap_source: sitemapUrl,
+            page_title: extracted.title,
+            page_description: extracted.description || null,
+            chunk_index: chunkIdx,
+            total_chunks: chunks.length,
+            is_chunked: chunks.length > 1,
+            embedding_model: modelVersion,
+            chunking_strategy: USE_SEMANTIC_CHUNKING
+              ? 'semantic'
+              : 'fixed-size',
+            ingestion_date: new Date().toISOString(),
+            lastmod: sitemapEntry.lastmod || null,
+            priority: sitemapEntry.priority || null,
+          };
+
+          // Create document identifier
+          const docIdentifier =
+            chunks.length > 1
+              ? `${extracted.title} [Chunk ${chunkIdx + 1}/${chunks.length}]`
+              : extracted.title;
+
+          // Insert into database
+          insertDocument(
+            db,
+            docIdentifier,
+            extracted.text, // Full page content
+            chunk, // Individual chunk
+            chunkEmbedding!,
+            chunkIdx,
+            chunk.length,
+            questions,
+            questionEmbeddings,
+            chunkMetadata
+          );
+        }
+
+        console.log(
+          `  ✓ Successfully processed: ${extracted.title} (${chunks.length} chunks)`
+        );
+
+        results.push({
+          filename: normalizedUrl,
+          chunks_created: chunks.length,
+          success: true,
+        });
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`  ✗ ${errorMsg}`);
+        results.push({
+          filename: normalizedUrl,
+          chunks_created: 0,
+          success: false,
+          error: errorMsg,
+        });
+        // Continue with next URL
+      }
+    }
+
+    console.log('\n=== Sitemap Ingestion Complete ===');
+    const successful = results.filter(r => r.success);
+    const totalChunks = successful.reduce(
+      (sum, r) => sum + r.chunks_created,
+      0
+    );
+    console.log(
+      `Successfully processed: ${successful.length}/${results.length} pages`
+    );
+    console.log(`Total chunks created: ${totalChunks}`);
+
+    return results;
+  } catch (error) {
+    console.error('Error processing sitemap:', error);
+    const err = error instanceof Error ? error : new Error(String(error));
+    throw new IngestionError(
+      `Failed to ingest sitemap ${sitemapUrl}: ${err.message}`,
+      err
+    );
+  } finally {
+    // Clean up browser resources
+    if (page) {
+      await page.close().catch(e => console.error('Error closing page:', e));
+    }
+    if (browser) {
+      await browser
+        .close()
+        .catch(e => console.error('Error closing browser:', e));
+    }
   }
 }

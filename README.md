@@ -8,7 +8,8 @@ A type-safe vector database built with Bun, using SQLite for storage and hybrid 
 - 📊 SQLite-based storage using `bun:sqlite`
 - 🤖 AI SDK integration with support for multiple providers
 - 🧠 Hybrid Question-Based RAG using Hypothetical Question Embedding (HQE)
-- 📄 PDF and text file support
+- 📄 PDF, text, CSV, and code file support
+- 🌐 Sitemap-based web content ingestion
 - 🔍 Advanced semantic search via weighted hybrid similarity
 - 🛡️ Fully type-safe with TypeScript
 - 🌐 REST API for searching and asking questions
@@ -18,6 +19,16 @@ A type-safe vector database built with Bun, using SQLite for storage and hybrid 
 ```bash
 bun install
 ```
+
+### For Sitemap Ingestion (Optional)
+
+If you plan to use the sitemap ingestion feature, install Playwright browsers:
+
+```bash
+bunx playwright install chromium
+```
+
+This downloads a real Chromium browser that bypasses bot detection when scraping websites.
 
 ## Configuration
 
@@ -81,7 +92,9 @@ This vector database can be used as an MCP (Model Context Protocol) server with 
 
 ### 1. Feed Documents
 
-Place your PDF and/or text files in the `./source` directory, then run:
+#### Option A: Local Files
+
+Place your PDF, text, CSV, or code files in the `./source` directory, then run:
 
 ```bash
 bun run feed
@@ -90,14 +103,33 @@ bun run feed
 Or specify a custom directory:
 
 ```bash
-bun scripts/feed.ts /path/to/your/documents
+bun scripts/feed-files.ts /path/to/your/documents
+```
+
+#### Option B: Website Sitemap
+
+Ingest content from a website using its sitemap:
+
+```bash
+bun run feed-sitemap https://docs.example.com/sitemap.xml
 ```
 
 This will:
 
-- Extract text from all PDF and TXT files
-- Split content into chunks (1200 chars with 400 char overlap)
-- Generate 5 hypothetical questions per chunk using LLM
+- Parse the sitemap (handles nested sitemap indexes)
+- Launch a real Chrome browser (via Playwright)
+- Visit each URL and extract rendered content
+- Process content through the same RAG pipeline
+
+**Note:** This uses Playwright browser automation to bypass bot detection (Cloudflare, etc.). The first time you run it, make sure you've installed the browser: `bunx playwright install chromium`
+
+#### What Happens During Ingestion
+
+The ingestion process will:
+
+- Extract text from all supported files (PDF, TXT, CSV, code files, or web pages)
+- Split content into chunks (with overlap)
+- Generate hypothetical questions per chunk using LLM
 - Generate embeddings for content AND questions using your configured embedding model
 - Store everything in the SQLite database
 
