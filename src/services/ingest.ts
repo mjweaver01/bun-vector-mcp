@@ -500,7 +500,7 @@ export async function ingestSitemap(
         await page.evaluate(() => {
           // Remove common non-content elements
           const selectorsToRemove = [
-            'header',
+            // 'header', //tw has bad html5 tagging
             'footer',
             'nav',
             'aside',
