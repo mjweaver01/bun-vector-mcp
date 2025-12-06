@@ -8,6 +8,7 @@
     "start": "bun src/index.ts",
     "feed": "bun src/scripts/feed-files.ts",
     "feed-sitemap": "bun src/scripts/feed-sitemap.ts",
+    "merge-db": "bun src/scripts/merge-databases.ts",
     "mcp": "MCP_MODE=true bun src/mcp.ts",
     "test:mcp": "MCP_MODE=true mcp-inspector bun src/mcp.ts",
     "format": "prettier --write .",
