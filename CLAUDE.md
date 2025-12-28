@@ -23,6 +23,28 @@ Default to using Bun instead of Node.js.
 - Prefer `Bun.file` over `node:fs`'s readFile/writeFile
 - Bun.$`ls` instead of execa.
 
+## Logging
+
+Use the custom logger utility for server-side code. Don't use `console.log` or `console.error` directly.
+
+- Use `log()` from `src/utils/logger` instead of `console.log()`
+- Use `error()` from `src/utils/logger` instead of `console.error()`
+
+The logger utility automatically suppresses stdout logs when running in MCP mode (where stdio is used for JSON-RPC communication). Errors always go to stderr which is safe in all contexts.
+
+```ts
+import { log, error } from './utils/logger';
+
+// Regular logging (suppressed in MCP mode)
+log('Server started on port 1738');
+log(`Processing ${files.length} files`);
+
+// Error logging (always shown on stderr)
+error('Failed to connect to database:', err);
+```
+
+**Exception:** Browser-side code (React components, frontend scripts) should continue using `console.log` and `console.error` as normal, since those run in the browser environment where the logger utility is not available.
+
 ## Testing
 
 Use `bun test` to run tests.

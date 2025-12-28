@@ -2,6 +2,8 @@
  * Sitemap parsing and URL extraction utilities
  */
 
+import { log, error } from './logger';
+
 export interface SitemapUrl {
   loc: string;
   lastmod?: string;
@@ -137,12 +139,12 @@ export async function extractAllUrls(
     visitedSitemaps.add(url);
 
     try {
-      console.log(`  Fetching sitemap: ${url} (depth: ${depth})`);
+      log(`  Fetching sitemap: ${url} (depth: ${depth})`);
       const xmlContent = await fetchSitemap(url);
 
       // Check if this is a sitemap index
       if (isSitemapIndex(xmlContent)) {
-        console.log(`  Found sitemap index with nested sitemaps`);
+        log(`  Found sitemap index with nested sitemaps`);
         const nestedSitemaps = parseSitemapIndex(xmlContent);
 
         // Recursively process each nested sitemap
@@ -152,13 +154,13 @@ export async function extractAllUrls(
       } else {
         // Regular sitemap - extract URLs
         const urls = parseSitemap(xmlContent);
-        console.log(`  Found ${urls.length} URLs in sitemap`);
+        log(`  Found ${urls.length} URLs in sitemap`);
         allUrls.push(...urls);
       }
-    } catch (error) {
-      console.error(
+    } catch (err) {
+      error(
         `  Error processing sitemap ${url}:`,
-        error instanceof Error ? error.message : String(error)
+        err instanceof Error ? err.message : String(err)
       );
       // Continue processing other sitemaps even if one fails
     }

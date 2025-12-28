@@ -14,6 +14,7 @@ import type {
 import queryPageHtml from './frontend/pages/query/query.html';
 import docsPageHtml from './frontend/pages/docs/docs.html';
 import { DEFAULT_TOP_K, SIMILARITY_THRESHOLD } from './constants/rag';
+import { log, error } from './utils/logger';
 
 // Initialize on startup
 const db = initializeDatabase();
@@ -109,12 +110,12 @@ const server = Bun.serve({
           return new Response(JSON.stringify(response), {
             headers: { 'Content-Type': 'application/json' },
           });
-        } catch (error) {
-          console.error('Search error:', error);
+        } catch (err) {
+          error('Search error:', err);
           return new Response(
             JSON.stringify({
               error: 'Internal server error',
-              message: error instanceof Error ? error.message : String(error),
+              message: err instanceof Error ? err.message : String(err),
             }),
             {
               status: 500,
@@ -178,12 +179,12 @@ const server = Bun.serve({
           return new Response(JSON.stringify(response), {
             headers: { 'Content-Type': 'application/json' },
           });
-        } catch (error) {
-          console.error('Ask error:', error);
+        } catch (err) {
+          error('Ask error:', err);
           return new Response(
             JSON.stringify({
               error: 'Internal server error',
-              message: error instanceof Error ? error.message : String(error),
+              message: err instanceof Error ? err.message : String(err),
             }),
             {
               status: 500,
@@ -249,11 +250,11 @@ const server = Bun.serve({
 
                 // Close the stream
                 controller.close();
-              } catch (error) {
-                console.error('Stream error:', error);
+              } catch (err) {
+                error('Stream error:', err);
                 const errorEvent: StreamEvent = {
                   type: 'error',
-                  error: error instanceof Error ? error.message : String(error),
+                  error: err instanceof Error ? err.message : String(err),
                 };
                 const sseMessage = `data: ${JSON.stringify(errorEvent)}\n\n`;
                 controller.enqueue(encoder.encode(sseMessage));
@@ -270,12 +271,12 @@ const server = Bun.serve({
               'Access-Control-Allow-Origin': '*',
             },
           });
-        } catch (error) {
-          console.error('Ask stream error:', error);
+        } catch (err) {
+          error('Ask stream error:', err);
           return new Response(
             JSON.stringify({
               error: 'Internal server error',
-              message: error instanceof Error ? error.message : String(error),
+              message: err instanceof Error ? err.message : String(err),
             }),
             {
               status: 500,
@@ -291,30 +292,30 @@ const server = Bun.serve({
   },
 });
 
-console.log(
+log(
   `🚀 Vector Database API running on http://localhost:${server.port}`
 );
-console.log(`📊 Currently storing ${getDocumentCount(db)} document chunks`);
-console.log('\nEndpoints:');
-console.log('  GET  / - Web UI for asking questions');
-console.log('  GET  /docs - Architecture documentation');
-console.log('  GET  /health - Health check');
-console.log('  POST /search - Search similar documents');
-console.log('  POST /ask - Ask a question (RAG)');
-console.log('  POST /ask/stream - Ask with streaming (SSE)');
-console.log('\nExample search:');
-console.log(`  curl -X POST http://localhost:${server.port}/search \\`);
-console.log(`    -H "Content-Type: application/json" \\`);
-console.log(`    -d '{"query": "your search query", "topK": 5}'`);
-console.log('\nExample ask:');
-console.log(`  curl -X POST http://localhost:${server.port}/ask \\`);
-console.log(`    -H "Content-Type: application/json" \\`);
-console.log(`    -d '{"question": "What is vector search?"}'`);
-console.log('\nExample streaming ask:');
-console.log(`  curl -N -X POST http://localhost:${server.port}/ask/stream \\`);
-console.log(`    -H "Content-Type: application/json" \\`);
-console.log(`    -d '{"question": "What is vector search?"}'`);
-console.log(`\n💻 Web UI available at: http://localhost:${server.port}`);
-console.log(
+log(`📊 Currently storing ${getDocumentCount(db)} document chunks`);
+log('\nEndpoints:');
+log('  GET  / - Web UI for asking questions');
+log('  GET  /docs - Architecture documentation');
+log('  GET  /health - Health check');
+log('  POST /search - Search similar documents');
+log('  POST /ask - Ask a question (RAG)');
+log('  POST /ask/stream - Ask with streaming (SSE)');
+log('\nExample search:');
+log(`  curl -X POST http://localhost:${server.port}/search \\`);
+log(`    -H "Content-Type: application/json" \\`);
+log(`    -d '{"query": "your search query", "topK": 5}'`);
+log('\nExample ask:');
+log(`  curl -X POST http://localhost:${server.port}/ask \\`);
+log(`    -H "Content-Type: application/json" \\`);
+log(`    -d '{"question": "What is vector search?"}'`);
+log('\nExample streaming ask:');
+log(`  curl -N -X POST http://localhost:${server.port}/ask/stream \\`);
+log(`    -H "Content-Type: application/json" \\`);
+log(`    -d '{"question": "What is vector search?"}'`);
+log(`\n💻 Web UI available at: http://localhost:${server.port}`);
+log(
   `📚 Documentation available at: http://localhost:${server.port}/docs`
 );

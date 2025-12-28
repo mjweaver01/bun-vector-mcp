@@ -10,6 +10,7 @@ import {
 } from '../services/questions';
 import type { IngestResult } from '../types/index';
 import { IngestionError } from './errors';
+import { log, error } from './logger';
 import { normalizeForEmbedding } from './text';
 
 // Common code file extensions (ingested as whole files)
@@ -77,7 +78,7 @@ export async function ingestCodeFile(
   const filename = filePath.split('/').pop() || filePath;
 
   try {
-    console.log(`Processing code file (whole file): ${filename}`);
+    log(`Processing code file (whole file): ${filename}`);
 
     // Read file content directly
     const file = Bun.file(filePath);
@@ -92,19 +93,19 @@ export async function ingestCodeFile(
       };
     }
 
-    console.log(`  File size: ${content.length} characters`);
+    log(`  File size: ${content.length} characters`);
 
     // Initialize question generator
-    console.log('  Initializing question generator...');
+    log('  Initializing question generator...');
     await initializeQuestionGenerator();
 
     // Generate embedding for the entire file
-    console.log('  Generating embedding for entire file...');
+    log('  Generating embedding for entire file...');
     const normalizedContent = normalizeForEmbedding(content);
     const [contentEmbedding] = await generateEmbeddings([normalizedContent]);
 
     // Generate questions for the entire file
-    console.log('  Generating questions for entire file...');
+    log('  Generating questions for entire file...');
     const questions = await generateQuestions(content);
 
     // Generate question embeddings
@@ -142,19 +143,19 @@ export async function ingestCodeFile(
       metadata
     );
 
-    console.log(`✓ Successfully processed code file: ${filename}`);
+    log(`✓ Successfully processed code file: ${filename}`);
 
     return {
       filename,
       chunks_created: 1,
       success: true,
     };
-  } catch (error) {
-    console.error(`✗ Error processing code file ${filename}:`, error);
-    const err = error instanceof Error ? error : new Error(String(error));
+  } catch (err) {
+    error(`✗ Error processing code file ${filename}:`, err);
+    const e = err instanceof Error ? err : new Error(String(err));
     throw new IngestionError(
-      `Failed to ingest code file ${filename}: ${err.message}`,
-      err
+      `Failed to ingest code file ${filename}: ${e.message}`,
+      e
     );
   }
 }

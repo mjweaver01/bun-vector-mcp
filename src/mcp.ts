@@ -11,6 +11,7 @@ import { searchSimilar } from './services/search';
 import { askQuestion } from './services/rag';
 import { EMBEDDING_MODEL, LLM_MODEL } from './constants/providers';
 import { DEFAULT_TOP_K, MAX_ANSWER_TOKENS } from './constants/rag';
+import { error } from './utils/logger';
 
 // Initialize database, embeddings, and LLM
 const db = initializeDatabase();
@@ -220,7 +221,7 @@ async function main() {
   // Server is now running - no logging needed in MCP mode
 }
 
-main().catch(error => {
-  console.error('Fatal error:', error);
+main().catch(err => {
+  error('Fatal error:', err);
   process.exit(1);
 });

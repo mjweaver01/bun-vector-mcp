@@ -17,6 +17,7 @@ import {
 import { extractAllUrls } from '../utils/sitemap';
 import { extractMainContent, isValidUrl, normalizeUrl } from '../utils/web';
 import { chromium, type Browser, type Page } from 'playwright';
+import { log, error } from '../utils/logger';
 
 /**
  * Ingest a CSV file, processing each row as a separate document
@@ -28,7 +29,7 @@ export async function ingestCSV(
   const filename = filePath.split('/').pop() || filePath;
 
   try {
-    console.log(`Processing CSV: ${filename}`);
+    log(`Processing CSV: ${filename}`);
 
     // Read and parse CSV file
     const file = Bun.file(filePath);
@@ -44,30 +45,30 @@ export async function ingestCSV(
       };
     }
 
-    console.log(`  Found ${rows.length} rows to process`);
+    log(`  Found ${rows.length} rows to process`);
 
     // Detect CSV schema from column names
     const columns = Object.keys(rows[0] || {});
     const schema = detectCSVSchema(columns);
 
     if (!schema.detected) {
-      console.log(
+      log(
         '  Warning: No standard columns detected, will use all columns'
       );
     } else {
-      console.log('  Detected schema mapping:');
-      if (schema.title) console.log(`    - Title: ${schema.title}`);
-      if (schema.content) console.log(`    - Content: ${schema.content}`);
-      if (schema.link) console.log(`    - Link: ${schema.link}`);
+      log('  Detected schema mapping:');
+      if (schema.title) log(`    - Title: ${schema.title}`);
+      if (schema.content) log(`    - Content: ${schema.content}`);
+      if (schema.link) log(`    - Link: ${schema.link}`);
       if (schema.collection)
-        console.log(`    - Collection: ${schema.collection}`);
-      if (schema.html) console.log(`    - HTML: ${schema.html}`);
-      if (schema.thesis) console.log(`    - Thesis: ${schema.thesis}`);
+        log(`    - Collection: ${schema.collection}`);
+      if (schema.html) log(`    - HTML: ${schema.html}`);
+      if (schema.thesis) log(`    - Thesis: ${schema.thesis}`);
     }
 
     // Initialize question generator
     if (!schema.thesis) {
-      console.log('  Initializing question generator...');
+      log('  Initializing question generator...');
       await initializeQuestionGenerator();
     }
 
@@ -79,7 +80,7 @@ export async function ingestCSV(
     // Process each row
     for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
       const row = rows[rowIdx]!;
-      console.log(`  Processing row ${rowIdx + 1}/${rows.length}...`);
+      log(`  Processing row ${rowIdx + 1}/${rows.length}...`);
 
       // Extract and combine main content fields using detected schema
       const title = schema.title ? row[schema.title] || '' : '';
@@ -104,7 +105,7 @@ export async function ingestCSV(
       const combinedText = textParts.filter(s => s.trim()).join('\n\n');
 
       if (!combinedText.trim()) {
-        console.log(`  Skipping empty row ${rowIdx + 1}`);
+        log(`  Skipping empty row ${rowIdx + 1}`);
         continue;
       }
 
@@ -149,7 +150,7 @@ export async function ingestCSV(
             : [combinedText];
 
       if (chunks.length > 1) {
-        console.log(
+        log(
           `  Row ${rowIdx + 1}/${rows.length}: Creating ${chunks.length} chunks`
         );
       }
@@ -169,7 +170,7 @@ export async function ingestCSV(
           questions = [thesisField.trim()];
         } else {
           // No thesis field - generate questions for this chunk
-          console.log(
+          log(
             `    Generating questions for chunk ${chunkIdx + 1}/${chunks.length}...`
           );
           questions = await generateQuestions(chunk);
@@ -215,7 +216,7 @@ export async function ingestCSV(
       }
     }
 
-    console.log(
+    log(
       `✓ Successfully processed CSV: ${filename} (${processedCount} rows)`
     );
 
@@ -225,7 +226,7 @@ export async function ingestCSV(
       success: true,
     };
   } catch (error) {
-    console.error(`✗ Error processing CSV ${filename}:`, error);
+    error(`✗ Error processing CSV ${filename}:`, error);
     const err = error instanceof Error ? error : new Error(String(error));
     throw new IngestionError(
       `Failed to ingest CSV file ${filename}: ${err.message}`,
@@ -252,7 +253,7 @@ export async function ingestFile(
   }
 
   try {
-    console.log(`Processing: ${filename}`);
+    log(`Processing: ${filename}`);
 
     // Extract text from file
     const content = await extractTextFromFile(filePath);
@@ -273,7 +274,7 @@ export async function ingestFile(
           ? await semanticChunking(content)
           : chunkText(content)
         : [content];
-    console.log(`  Created ${chunks.length} chunks`);
+    log(`  Created ${chunks.length} chunks`);
 
     if (chunks.length === 0) {
       return {
@@ -285,26 +286,26 @@ export async function ingestFile(
     }
 
     // Initialize question generator
-    console.log('  Initializing question generator...');
+    log('  Initializing question generator...');
     await initializeQuestionGenerator();
 
     // Batch process embeddings and questions
-    console.log('  Generating embeddings for all chunks...');
+    log('  Generating embeddings for all chunks...');
     // Normalize chunks for embedding to handle spelling variations
     const normalizedChunks = chunks.map(chunk => normalizeForEmbedding(chunk));
     const contentEmbeddings = await generateEmbeddings(normalizedChunks);
 
-    console.log('  Generating questions for all chunks...');
+    log('  Generating questions for all chunks...');
     const allQuestions: string[][] = [];
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]!;
-      console.log(`  Generating questions for chunk ${i + 1}/${chunks.length}`);
+      log(`  Generating questions for chunk ${i + 1}/${chunks.length}`);
       const questions = await generateQuestions(chunk);
       allQuestions.push(questions);
     }
 
     // Batch generate question embeddings
-    console.log('  Generating question embeddings...');
+    log('  Generating question embeddings...');
     const allQuestionEmbeddings: number[][][] = [];
     for (const questions of allQuestions) {
       if (questions.length > 0) {
@@ -324,7 +325,7 @@ export async function ingestFile(
     const modelVersion = getEmbeddingModelVersion();
 
     // Insert all chunks into database
-    console.log('  Inserting chunks into database...');
+    log('  Inserting chunks into database...');
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]!;
       const contentEmbedding = contentEmbeddings[i]!;
@@ -357,7 +358,7 @@ export async function ingestFile(
       );
     }
 
-    console.log(`✓ Successfully processed: ${filename}`);
+    log(`✓ Successfully processed: ${filename}`);
 
     return {
       filename,
@@ -365,7 +366,7 @@ export async function ingestFile(
       success: true,
     };
   } catch (error) {
-    console.error(`✗ Error processing ${filename}:`, error);
+    error(`✗ Error processing ${filename}:`, error);
     const err = error instanceof Error ? error : new Error(String(error));
     throw new IngestionError(
       `Failed to ingest file ${filename}: ${err.message}`,
@@ -391,11 +392,11 @@ export async function ingestDirectory(
     );
 
     if (files.length === 0) {
-      console.error('No supported files found in directory');
+      error('No supported files found in directory');
       return results;
     }
 
-    console.log(`Found ${files.length} files to process\n`);
+    log(`Found ${files.length} files to process\n`);
 
     for (const file of files) {
       const fullPath = `${directoryPath}/${file}`;
@@ -405,7 +406,7 @@ export async function ingestDirectory(
 
     return results;
   } catch (error) {
-    console.error('Error reading directory:', error);
+    error('Error reading directory:', error);
     return results;
   }
 }
@@ -423,21 +424,21 @@ export async function ingestSitemap(
   let page: Page | null = null;
 
   try {
-    console.log(`\n=== Processing Sitemap: ${sitemapUrl} ===\n`);
+    log(`\n=== Processing Sitemap: ${sitemapUrl} ===\n`);
 
     // Extract all URLs from sitemap (handles nested sitemaps)
-    console.log('Extracting URLs from sitemap...');
+    log('Extracting URLs from sitemap...');
     const sitemapUrls = await extractAllUrls(sitemapUrl);
 
     if (sitemapUrls.length === 0) {
-      console.error('No URLs found in sitemap');
+      error('No URLs found in sitemap');
       return results;
     }
 
-    console.log(`\nFound ${sitemapUrls.length} URLs to process\n`);
+    log(`\nFound ${sitemapUrls.length} URLs to process\n`);
 
     // Launch browser
-    console.log('Launching browser...');
+    log('Launching browser...');
     browser = await chromium.launch({
       headless: true,
     });
@@ -449,7 +450,7 @@ export async function ingestSitemap(
     });
 
     // Initialize question generator once
-    console.log('Initializing question generator...');
+    log('Initializing question generator...');
     await initializeQuestionGenerator();
 
     // Get embedding model version
@@ -460,11 +461,11 @@ export async function ingestSitemap(
       const sitemapEntry = sitemapUrls[i]!;
       const url = sitemapEntry.loc;
 
-      console.log(`\nProcessing URL ${i + 1}/${sitemapUrls.length}: ${url}`);
+      log(`\nProcessing URL ${i + 1}/${sitemapUrls.length}: ${url}`);
 
       // Validate URL
       if (!isValidUrl(url)) {
-        console.log(`  ✗ Skipping invalid URL: ${url}`);
+        log(`  ✗ Skipping invalid URL: ${url}`);
         results.push({
           filename: url,
           chunks_created: 0,
@@ -478,7 +479,7 @@ export async function ingestSitemap(
 
       try {
         // Navigate to the page using Playwright
-        console.log('  Loading page...');
+        log('  Loading page...');
 
         if (!page) {
           throw new Error('Browser page not initialized');
@@ -585,7 +586,7 @@ export async function ingestSitemap(
         };
 
         if (!extracted.text || extracted.text.trim().length === 0) {
-          console.log('  ✗ No content extracted from page');
+          log('  ✗ No content extracted from page');
           results.push({
             filename: normalizedUrl,
             chunks_created: 0,
@@ -595,7 +596,7 @@ export async function ingestSitemap(
           continue;
         }
 
-        console.log(
+        log(
           `  Extracted ${extracted.text.length} characters from "${extracted.title}"`
         );
 
@@ -607,7 +608,7 @@ export async function ingestSitemap(
               : chunkText(extracted.text)
             : [extracted.text];
 
-        console.log(`  Created ${chunks.length} chunks`);
+        log(`  Created ${chunks.length} chunks`);
 
         // Process each chunk
         for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
@@ -618,7 +619,7 @@ export async function ingestSitemap(
           const [chunkEmbedding] = await generateEmbeddings([normalizedChunk]);
 
           // Generate questions for this chunk
-          console.log(
+          log(
             `  Generating questions for chunk ${chunkIdx + 1}/${chunks.length}...`
           );
           const questions = await generateQuestions(chunk);
@@ -672,7 +673,7 @@ export async function ingestSitemap(
           );
         }
 
-        console.log(
+        log(
           `  ✓ Successfully processed: ${extracted.title} (${chunks.length} chunks)`
         );
 
@@ -683,7 +684,7 @@ export async function ingestSitemap(
         });
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`  ✗ ${errorMsg}`);
+        error(`  ✗ ${errorMsg}`);
         results.push({
           filename: normalizedUrl,
           chunks_created: 0,
@@ -694,20 +695,20 @@ export async function ingestSitemap(
       }
     }
 
-    console.log('\n=== Sitemap Ingestion Complete ===');
+    log('\n=== Sitemap Ingestion Complete ===');
     const successful = results.filter(r => r.success);
     const totalChunks = successful.reduce(
       (sum, r) => sum + r.chunks_created,
       0
     );
-    console.log(
+    log(
       `Successfully processed: ${successful.length}/${results.length} pages`
     );
-    console.log(`Total chunks created: ${totalChunks}`);
+    log(`Total chunks created: ${totalChunks}`);
 
     return results;
   } catch (error) {
-    console.error('Error processing sitemap:', error);
+    error('Error processing sitemap:', error);
     const err = error instanceof Error ? error : new Error(String(error));
     throw new IngestionError(
       `Failed to ingest sitemap ${sitemapUrl}: ${err.message}`,
@@ -716,12 +717,12 @@ export async function ingestSitemap(
   } finally {
     // Clean up browser resources
     if (page) {
-      await page.close().catch(e => console.error('Error closing page:', e));
+      await page.close().catch(e => error('Error closing page:', e));
     }
     if (browser) {
       await browser
         .close()
-        .catch(e => console.error('Error closing browser:', e));
+        .catch(e => error('Error closing browser:', e));
     }
   }
 }

@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import * as sqliteVec from 'sqlite-vec';
 import { EMBEDDING_DIMENSIONS } from '../constants/providers';
 import { serializeVector } from '../utils/vectors';
+import { log, error } from '../utils/logger';
 
 /**
  * Merge multiple vector databases into one
@@ -30,8 +31,8 @@ function openDatabase(path: string): Database {
   // Load sqlite-vec extension
   try {
     sqliteVec.load(db);
-  } catch (error) {
-    console.error(`Warning: Could not load sqlite-vec for ${path}:`, error);
+  } catch (err) {
+    error(`Warning: Could not load sqlite-vec for ${path}:`, err);
   }
 
   return db;
@@ -145,18 +146,18 @@ function insertDocument(db: Database, doc: DocumentRow): number {
 }
 
 async function main() {
-  console.log('=== Vector Database Merge Script ===\n');
+  log('=== Vector Database Merge Script ===\n');
 
   const args = process.argv.slice(2);
 
   if (args.length < 3) {
-    console.error('Error: Not enough arguments');
-    console.log(
+    error('Error: Not enough arguments');
+    log(
       '\nUsage: bun run merge-db <source1> <source2> [...sourceN] <target>'
     );
-    console.log('\nExample:');
-    console.log('  bun run merge-db _vector.db vector.db merged_vector.db');
-    console.log(
+    log('\nExample:');
+    log('  bun run merge-db _vector.db vector.db merged_vector.db');
+    log(
       '\nThis will merge _vector.db and vector.db into merged_vector.db'
     );
     process.exit(1);
@@ -165,15 +166,15 @@ async function main() {
   const sourcePaths = args.slice(0, -1);
   const targetPath = args[args.length - 1];
 
-  console.log('Source databases:');
-  sourcePaths.forEach((path, i) => console.log(`  ${i + 1}. ${path}`));
-  console.log(`\nTarget database: ${targetPath}\n`);
+  log('Source databases:');
+  sourcePaths.forEach((path, i) => log(`  ${i + 1}. ${path}`));
+  log(`\nTarget database: ${targetPath}\n`);
 
   // Check if target already exists
   const targetExists = await Bun.file(targetPath).exists();
   if (targetExists) {
-    console.error(`Error: Target database "${targetPath}" already exists.`);
-    console.log('Please delete it first or choose a different name.');
+    error(`Error: Target database "${targetPath}" already exists.`);
+    log('Please delete it first or choose a different name.');
     process.exit(1);
   }
 
@@ -181,7 +182,7 @@ async function main() {
   const startTime = performance.now();
 
   // Initialize target database
-  console.log('Initializing target database...');
+  log('Initializing target database...');
   const targetDb = createTargetDatabase(targetPath);
 
   // Track statistics
@@ -192,13 +193,13 @@ async function main() {
   // Process each source database
   for (let i = 0; i < sourcePaths.length; i++) {
     const sourcePath = sourcePaths[i];
-    console.log(`\nProcessing ${sourcePath}...`);
+    log(`\nProcessing ${sourcePath}...`);
 
     try {
       const sourceDb = openDatabase(sourcePath);
       const documents = getDocuments(sourceDb);
 
-      console.log(`  Found ${documents.length} documents`);
+      log(`  Found ${documents.length} documents`);
 
       let inserted = 0;
       let skipped = 0;
@@ -217,13 +218,13 @@ async function main() {
           duplicates.add(key);
           inserted++;
         } catch (error) {
-          console.error(`  Error inserting document ${doc.id}:`, error);
+          error(`  Error inserting document ${doc.id}:`, error);
         }
       }
 
-      console.log(`  Inserted: ${inserted}`);
+      log(`  Inserted: ${inserted}`);
       if (skipped > 0) {
-        console.log(`  Skipped (duplicates): ${skipped}`);
+        log(`  Skipped (duplicates): ${skipped}`);
       }
 
       documentsBySource.push(inserted);
@@ -231,7 +232,7 @@ async function main() {
 
       sourceDb.close();
     } catch (error) {
-      console.error(`  Error processing ${sourcePath}:`, error);
+      error(`  Error processing ${sourcePath}:`, error);
     }
   }
 
@@ -242,19 +243,19 @@ async function main() {
   const elapsedSeconds = ((endTime - startTime) / 1000).toFixed(2);
 
   // Print summary
-  console.log('\n=== Merge Summary ===');
-  console.log(`Total documents merged: ${totalDocuments}`);
-  console.log(`Time elapsed: ${elapsedSeconds}s`);
+  log('\n=== Merge Summary ===');
+  log(`Total documents merged: ${totalDocuments}`);
+  log(`Time elapsed: ${elapsedSeconds}s`);
 
-  console.log('\nDocuments by source:');
+  log('\nDocuments by source:');
   sourcePaths.forEach((path, i) => {
-    console.log(`  ${path}: ${documentsBySource[i]}`);
+    log(`  ${path}: ${documentsBySource[i]}`);
   });
 
-  console.log(`\n✓ Merge complete! New database: ${targetPath}`);
+  log(`\n✓ Merge complete! New database: ${targetPath}`);
 }
 
 main().catch(error => {
-  console.error('Fatal error:', error);
+  error('Fatal error:', error);
   process.exit(1);
 });
