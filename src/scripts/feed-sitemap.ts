@@ -126,7 +126,7 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  error('Fatal error:', error);
+main().catch(err => {
+  error('Fatal error:', err);
   process.exit(1);
 });

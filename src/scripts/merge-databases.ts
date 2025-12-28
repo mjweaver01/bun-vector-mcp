@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import * as sqliteVec from 'sqlite-vec';
+import { existsSync } from 'node:fs';
 import { EMBEDDING_DIMENSIONS } from '../constants/providers';
 import { serializeVector } from '../utils/vectors';
 import { log, error } from '../utils/logger';
@@ -41,11 +42,15 @@ function openDatabase(path: string): Database {
 function createTargetDatabase(path: string): Database {
   // On macOS, configure custom SQLite before creating database
   if (process.platform === 'darwin') {
-    try {
-      Database.setCustomSQLite('/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib');
-    } catch {
+    // Choose the correct path based on architecture
+    // Apple Silicon (arm64) uses /opt/homebrew, Intel (x86_64) uses /usr/local
+    const homebrewPath = process.arch === 'arm64'
+      ? '/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib'
+      : '/usr/local/opt/sqlite/lib/libsqlite3.dylib';
+    
+    if (existsSync(homebrewPath)) {
       try {
-        Database.setCustomSQLite('/usr/local/opt/sqlite/lib/libsqlite3.dylib');
+        Database.setCustomSQLite(homebrewPath);
       } catch {
         // Use system SQLite
       }
@@ -164,7 +169,7 @@ async function main() {
   }
 
   const sourcePaths = args.slice(0, -1);
-  const targetPath = args[args.length - 1];
+  const targetPath = args[args.length - 1]!;
 
   log('Source databases:');
   sourcePaths.forEach((path, i) => log(`  ${i + 1}. ${path}`));
@@ -192,7 +197,7 @@ async function main() {
 
   // Process each source database
   for (let i = 0; i < sourcePaths.length; i++) {
-    const sourcePath = sourcePaths[i];
+    const sourcePath = sourcePaths[i]!;
     log(`\nProcessing ${sourcePath}...`);
 
     try {
@@ -217,8 +222,8 @@ async function main() {
           insertDocument(targetDb, doc);
           duplicates.add(key);
           inserted++;
-        } catch (error) {
-          error(`  Error inserting document ${doc.id}:`, error);
+        } catch (err) {
+          error(`  Error inserting document ${doc.id}:`, err);
         }
       }
 
@@ -231,8 +236,8 @@ async function main() {
       totalDocuments += inserted;
 
       sourceDb.close();
-    } catch (error) {
-      error(`  Error processing ${sourcePath}:`, error);
+    } catch (err) {
+      error(`  Error processing ${sourcePath}:`, err);
     }
   }
 
@@ -255,7 +260,7 @@ async function main() {
   log(`\n✓ Merge complete! New database: ${targetPath}`);
 }
 
-main().catch(error => {
-  error('Fatal error:', error);
+main().catch(err => {
+  error('Fatal error:', err);
   process.exit(1);
 });

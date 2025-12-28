@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import * as sqliteVec from 'sqlite-vec';
 import type { Document } from '../types/index';
+import { existsSync } from 'node:fs';
 import { log } from '../utils/logger';
 import { EMBEDDING_DIMENSIONS } from '../constants/providers';
 import { DB_PATH } from '../constants/dirs';
@@ -16,18 +17,31 @@ log(`Using database at: ${DB_PATH}`);
 // On macOS, configure custom SQLite before creating any database instances
 // This is required for sqlite-vec extension loading support
 if (process.platform === 'darwin') {
-  try {
-    // Try Homebrew SQLite first (supports extensions)
-    Database.setCustomSQLite('/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib');
-    log('Using Homebrew SQLite (supports extensions)');
-  } catch {
-    try {
-      Database.setCustomSQLite('/usr/local/opt/sqlite/lib/libsqlite3.dylib');
-      log('Using Homebrew SQLite (supports extensions)');
-    } catch {
-      log('Warning: Using system SQLite - extension loading may not work');
-      log('Install Homebrew SQLite with: brew install sqlite');
+  // Try multiple possible Homebrew paths
+  const possiblePaths = [
+    '/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib',  // ARM64 Homebrew
+    '/usr/local/opt/sqlite/lib/libsqlite3.dylib',     // Intel Homebrew
+  ];
+  
+  let homebrewPath: string | null = null;
+  for (const path of possiblePaths) {
+    if (existsSync(path)) {
+      homebrewPath = path;
+      break;
     }
+  }
+  
+  if (homebrewPath) {
+    try {
+      Database.setCustomSQLite(homebrewPath);
+      log(`Using Homebrew SQLite (supports extensions): ${homebrewPath}`);
+    } catch (err) {
+      log(`Warning: Could not load Homebrew SQLite: ${err}`);
+      log('Possible architecture mismatch - see setup-arm64-sqlite.sh for solutions');
+    }
+  } else {
+    log('Warning: Homebrew SQLite not found');
+    log('Install with: brew install sqlite');
   }
 }
 

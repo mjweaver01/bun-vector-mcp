@@ -20,6 +20,25 @@ A type-safe vector database built with Bun, using SQLite for storage and hybrid 
 bun install
 ```
 
+### SQLite Setup (Apple Silicon)
+
+If you're on an Apple Silicon Mac and encounter SQLite errors, you need ARM64 Homebrew:
+
+```bash
+# 1. Install ARM64 Homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 2. Add to PATH
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+source ~/.zshrc
+
+# 3. Install ARM64 SQLite
+/opt/homebrew/bin/brew install sqlite
+
+# 4. Verify it's ARM64
+file /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib
+```
+
 ### For Sitemap Ingestion (Optional)
 
 If you plan to use the sitemap ingestion feature, install Playwright browsers:

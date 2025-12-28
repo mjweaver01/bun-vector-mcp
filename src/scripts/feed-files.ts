@@ -55,7 +55,7 @@ async function main() {
   log('\n✓ Feed complete!');
 }
 
-main().catch(error => {
-  error('Fatal error:', error);
+main().catch(err => {
+  error('Fatal error:', err);
   process.exit(1);
 });
