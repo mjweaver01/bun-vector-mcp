@@ -40,12 +40,6 @@ bun example.ts
 - `bun run mcp` - Start MCP server for Claude Desktop
 - `bun example.ts` - Run example queries
 
-## 📊 Current Status
-
-- **Documents**: 5 chunks indexed
-- **Model**: Xenova/all-MiniLM-L6-v2 (384 dimensions)
-- **Server**: http://localhost:1738
-
 ## 🔍 API Endpoints
 
 - `GET /` - API info
