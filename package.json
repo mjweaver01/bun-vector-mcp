@@ -7,6 +7,7 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "feed": "bun src/scripts/feed-files.ts",
+    "feed:resume": "bun src/scripts/feed-files.ts --resume",
     "feed-sitemap": "bun src/scripts/feed-sitemap.ts",
     "merge-db": "bun src/scripts/merge-databases.ts",
     "mcp": "MCP_MODE=true bun src/mcp.ts",

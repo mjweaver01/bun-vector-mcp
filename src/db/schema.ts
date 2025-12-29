@@ -241,3 +241,17 @@ export function clearDatabase(db: Database): void {
   db.run('DELETE FROM vec_embeddings');
   log('Database cleared (documents and vec_embeddings)');
 }
+
+/**
+ * Check if a file has already been processed (has documents in the database)
+ */
+export function isFileProcessed(db: Database, filePath: string): boolean {
+  // Extract just the filename from the full path for comparison
+  const filename = filePath.split('/').pop() || filePath;
+  
+  const stmt = db.prepare(`
+    SELECT COUNT(*) as count FROM documents WHERE filename = ? OR filename LIKE ?
+  `);
+  const result = stmt.get(filename, `${filename}%`) as { count: number };
+  return result.count > 0;
+}

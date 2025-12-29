@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import { insertDocument } from '../db/schema';
+import { insertDocument, isFileProcessed } from '../db/schema';
 import { generateEmbeddings, getEmbeddingModelVersion } from './embeddings';
 import { generateQuestions, initializeQuestionGenerator } from './questions';
 import type { IngestResult } from '../types/index';
@@ -225,12 +225,12 @@ export async function ingestCSV(
       chunks_created: processedCount,
       success: true,
     };
-  } catch (error) {
-    error(`✗ Error processing CSV ${filename}:`, error);
-    const err = error instanceof Error ? error : new Error(String(error));
+  } catch (err) {
+    error(`✗ Error processing CSV ${filename}:`, err);
+    const errorObj = err instanceof Error ? err : new Error(String(err));
     throw new IngestionError(
-      `Failed to ingest CSV file ${filename}: ${err.message}`,
-      err
+      `Failed to ingest CSV file ${filename}: ${errorObj.message}`,
+      errorObj
     );
   }
 }
@@ -365,19 +365,20 @@ export async function ingestFile(
       chunks_created: chunks.length,
       success: true,
     };
-  } catch (error) {
-    error(`✗ Error processing ${filename}:`, error);
-    const err = error instanceof Error ? error : new Error(String(error));
+  } catch (err) {
+    error(`✗ Error processing ${filename}:`, err);
+    const errorObj = err instanceof Error ? err : new Error(String(err));
     throw new IngestionError(
-      `Failed to ingest file ${filename}: ${err.message}`,
-      err
+      `Failed to ingest file ${filename}: ${errorObj.message}`,
+      errorObj
     );
   }
 }
 
 export async function ingestDirectory(
   db: Database,
-  directoryPath: string
+  directoryPath: string,
+  resumeMode: boolean = false
 ): Promise<IngestResult[]> {
   const results: IngestResult[] = [];
 
@@ -400,13 +401,37 @@ export async function ingestDirectory(
 
     for (const file of files) {
       const fullPath = `${directoryPath}/${file}`;
-      const result = await ingestFile(db, fullPath);
-      results.push(result);
+      
+      // Check if file was already processed (resume mode)
+      if (resumeMode && isFileProcessed(db, fullPath)) {
+        log(`⏭  Skipping already processed: ${file}`);
+        results.push({
+          filename: file,
+          chunks_created: 0,
+          success: true,
+          error: 'Already processed (skipped)',
+        });
+        continue;
+      }
+
+      try {
+        const result = await ingestFile(db, fullPath);
+        results.push(result);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        error(`Error processing ${file}:`, err);
+        results.push({
+          filename: file,
+          chunks_created: 0,
+          success: false,
+          error: errorMsg,
+        });
+      }
     }
 
     return results;
-  } catch (error) {
-    error('Error reading directory:', error);
+  } catch (err) {
+    error('Error reading directory:', err);
     return results;
   }
 }
@@ -682,8 +707,8 @@ export async function ingestSitemap(
           chunks_created: chunks.length,
           success: true,
         });
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
         error(`  ✗ ${errorMsg}`);
         results.push({
           filename: normalizedUrl,
@@ -707,12 +732,12 @@ export async function ingestSitemap(
     log(`Total chunks created: ${totalChunks}`);
 
     return results;
-  } catch (error) {
-    error('Error processing sitemap:', error);
-    const err = error instanceof Error ? error : new Error(String(error));
+  } catch (err) {
+    error('Error processing sitemap:', err);
+    const errorObj = err instanceof Error ? err : new Error(String(err));
     throw new IngestionError(
-      `Failed to ingest sitemap ${sitemapUrl}: ${err.message}`,
-      err
+      `Failed to ingest sitemap ${sitemapUrl}: ${errorObj.message}`,
+      errorObj
     );
   } finally {
     // Clean up browser resources
