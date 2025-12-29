@@ -242,16 +242,59 @@ export function clearDatabase(db: Database): void {
   log('Database cleared (documents and vec_embeddings)');
 }
 
+
 /**
- * Check if a file has already been processed (has documents in the database)
+ * Check if a file has already been fully processed (has all chunks in the database)
  */
 export function isFileProcessed(db: Database, filePath: string): boolean {
   // Extract just the filename from the full path for comparison
   const filename = filePath.split('/').pop() || filePath;
   
-  const stmt = db.prepare(`
+  // First, check if any documents exist for this file
+  const countStmt = db.prepare(`
     SELECT COUNT(*) as count FROM documents WHERE filename = ? OR filename LIKE ?
   `);
-  const result = stmt.get(filename, `${filename}%`) as { count: number };
-  return result.count > 0;
+  const countResult = countStmt.get(filename, `${filename}%`) as { count: number };
+  
+  if (countResult.count === 0) {
+    return false; // No documents found
+  }
+  
+  // Check if all chunks are present by looking at chunk_metadata
+  // Get the expected total_chunks and actual chunks present
+  const checkStmt = db.prepare(`
+    SELECT 
+      chunk_metadata,
+      chunk_index,
+      MAX(chunk_index) as max_chunk
+    FROM documents 
+    WHERE filename = ? OR filename LIKE ?
+    GROUP BY filename
+  `);
+  const checkResult = checkStmt.get(filename, `${filename}%`) as {
+    chunk_metadata: string | null;
+    chunk_index: number;
+    max_chunk: number;
+  } | null;
+  
+  if (!checkResult) {
+    return false;
+  }
+  
+  // Parse metadata to get expected total_chunks
+  let expectedChunks = 1;
+  if (checkResult.chunk_metadata) {
+    try {
+      const metadata = JSON.parse(checkResult.chunk_metadata) as { total_chunks?: number };
+      if (metadata.total_chunks) {
+        expectedChunks = metadata.total_chunks;
+      }
+    } catch {
+      // If we can't parse metadata, fall back to checking count
+    }
+  }
+  
+  // Verify we have all chunks (0 to total_chunks-1)
+  const actualChunks = countResult.count;
+  return actualChunks >= expectedChunks;
 }
