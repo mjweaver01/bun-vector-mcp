@@ -68,7 +68,7 @@ export function QueryInput({
               fontWeight: mode === 'ask' ? 600 : 400,
             }}
           >
-            Ask (RAG)
+            Ask (RAG + LLM Response)
           </span>
         </label>
         <label className="flex items-center cursor-pointer group">
@@ -91,7 +91,7 @@ export function QueryInput({
               fontWeight: mode === 'search' ? 600 : 400,
             }}
           >
-            Search (Similarity)
+            Search (RAG)
           </span>
         </label>
       </div>
